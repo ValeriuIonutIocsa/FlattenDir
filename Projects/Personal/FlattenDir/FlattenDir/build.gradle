@@ -1,0 +1,13 @@
+ext {
+    mainClass = 'com.personal.flatten_dir.AppStart' + project.name
+    projectVersion = '0.0.1'
+    jarFolderPath = 'C:\\IVI\\Apps\\Scripts\\General\\FlattenDir'
+
+    subProjectNames = []
+    compileClassPaths = []
+    compileJarFilePaths = []
+    testCompileClassPaths = []
+    testCompileJarFilePaths = []
+}
+
+apply from: gradle.ext.rootDirPath + '/common_build.gradle'

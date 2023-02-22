@@ -1,0 +1,17 @@
+/.gradle
+/.settings
+/build
+/bin
+/out
+/local.properties
+/captures
+.classpath
+.project
+.pydevproject
+.settings
+.metadata
+.externalNativeBuild
+.cxx
+.DS_Store
+local.properties
+.idea/workspace.xml

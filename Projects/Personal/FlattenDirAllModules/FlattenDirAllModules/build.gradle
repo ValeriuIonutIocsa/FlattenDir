@@ -1,0 +1,11 @@
+ext {
+    subProjectNames = [
+            ':FlattenDir'
+    ]
+    compileClassPaths = []
+    compileJarFilePaths = []
+    testCompileClassPaths = []
+    testCompileJarFilePaths = []
+}
+
+apply from: gradle.ext.rootDirPath + '/common_build.gradle'

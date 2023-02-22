@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<project version="4">
+    <component migrationVersion="1" name="GradleMigrationSettings"/>
+    <component name="GradleSettings">
+        <option name="linkedExternalProjectsSettings">
+            <GradleProjectSettings>
+                <option name="delegatedBuild" value="false"/>
+                <option name="testRunner" value="PLATFORM"/>
+                <option name="distributionType" value="DEFAULT_WRAPPED"/>
+                <option name="externalProjectPath" value="$PROJECT_DIR$"/>
+            </GradleProjectSettings>
+        </option>
+    </component>
+</project>

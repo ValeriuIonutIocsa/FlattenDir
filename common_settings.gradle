@@ -1,0 +1,27 @@
+ext {
+    configureSettings = this.&configureSettings
+}
+
+def configureSettings(
+        final String projectPath, final String rootDirPath, final String[] subProjectsRelativePaths) {
+
+    for (String subProjectsRelativePath : subProjectsRelativePaths) {
+
+        if (subProjectsRelativePath == null)
+            continue
+
+        final String subProjectPath = rootDirPath + subProjectsRelativePath
+        importSubProject(subProjectPath)
+    }
+
+    rootProject.name = file(projectPath).name
+}
+
+def importSubProject(String subProjectPath) {
+
+    final String name = ':' + file(subProjectPath).name
+    include name
+
+    apply from: (subProjectPath + '/settings.gradle')
+    project(name).projectDir = file(subProjectPath)
+}

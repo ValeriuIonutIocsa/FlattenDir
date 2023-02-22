@@ -1,0 +1,403 @@
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.nio.file.StandardCopyOption
+
+if (project.hasProperty('projectGroup')) {
+    group = projectGroup
+} else {
+    group = project.name
+}
+if (project.hasProperty('projectVersion')) {
+    version = projectVersion
+} else {
+    version = '1.0.0'
+}
+
+apply plugin: 'java-library'
+apply plugin: 'java-test-fixtures'
+sourceCompatibility = JavaVersion.VERSION_11
+targetCompatibility = JavaVersion.VERSION_11
+compileJava.options.encoding = 'UTF-8'
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+dependencies {
+    for (String subProjectName : subProjectNames) {
+
+        if (subProjectName != null) {
+            api project(subProjectName)
+            testFixturesApi testFixtures(project(subProjectName))
+        }
+    }
+
+    for (String compileClassPath : compileClassPaths) {
+
+        if (compileClassPath != null) {
+            api compileClassPath
+        }
+    }
+    for (String compileJarFilePath : compileJarFilePaths) {
+
+        if (compileJarFilePath != null) {
+            api files(compileJarFilePath)
+        }
+    }
+
+    testFixturesImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.2'
+    testFixturesRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.9.2'
+    testFixturesRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.9.2'
+
+    for (String testCompileClassPath : testCompileClassPaths) {
+
+        if (testCompileClassPath != null) {
+            testFixturesImplementation testCompileClassPath
+        }
+    }
+    for (String testCompileJarFilePath : testCompileJarFilePaths) {
+
+        if (testCompileJarFilePath != null) {
+            testFixturesApi files(testCompileJarFilePath)
+        }
+    }
+
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.2'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.9.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.9.2'
+
+    for (String testCompileClassPath : testCompileClassPaths) {
+
+        if (testCompileClassPath != null) {
+            testImplementation testCompileClassPath
+        }
+    }
+    for (String testCompileJarFilePath : testCompileJarFilePaths) {
+
+        if (testCompileJarFilePath != null) {
+            testApi files(testCompileJarFilePath)
+        }
+    }
+}
+
+clean {
+
+    subProjectNames.each { dependsOn("${it}:clean") }
+
+    doFirst {
+        delete "${projectDir}/bin"
+        delete "${projectDir}/out"
+    }
+}
+
+compileJava {
+    dependsOn('processResources')
+}
+
+task fatJar(type: Jar, dependsOn: compileJava) {
+
+    subProjectNames.each { dependsOn("${it}:fatJar") }
+    onlyIf { rootDir == projectDir }
+
+    archiveFileName = "${project.name}.jar"
+    File destDir = createDestDir()
+    destinationDirectory.set(destDir)
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    try {
+        if (project.hasProperty('mainClass')) {
+            manifest {
+                attributes('Main-Class': mainClass,
+                        'Implementation-Title': project.name,
+                        'Implementation-Version': project.version,
+                        'Build-Time': new Date().format('dd MMM yyyy, hh:mm:ss zzz'))
+            }
+        }
+    } catch (Exception ignored) {
+    }
+
+    archiveClassifier.set('all')
+    from {
+        final projects = createProjectAndDependenciesList(project)
+        projects.collect {
+            it.sourceSets.main.runtimeClasspath
+                    .filter {
+                        !it.name.endsWith('.jar') || !(it.absolutePath.contains('build\\libs') || it.absolutePath.contains('build/libs'))
+                    }
+                    .collect { it.name.endsWith('.jar') ? zipTree(it) : it }
+        }
+    }
+
+    doLast {
+        new File((String) "${destDir}/.gitignore").text = '/*.jar\n/*.exe\n/*.res'
+        File otherDestDir = createOtherDestDir()
+        if (otherDestDir != destDir) {
+            copyFile(destDir.toString(), otherDestDir.toString(), archiveFileName.get().toString())
+        }
+        if (project.hasProperty('covertToExe') && covertToExe) {
+            final File wrapperScriptFile = new File((String) "${destDir}/wrapper/Wrapper.java")
+            if (wrapperScriptFile.exists()) {
+                exec {
+                    String javaHomeFolderPathString = System.getProperty("java.home")
+                    Path javaExePath = Paths.get(javaHomeFolderPathString, "bin", "java.exe")
+                    String javaExeFilePathString = javaExePath.toAbsolutePath().toString()
+                    commandLine javaExeFilePathString, "${wrapperScriptFile}", "${wrapperScriptFile}", "${project.name}"
+                    workingDir "${destDir}"
+                }
+                if (otherDestDir != destDir) {
+                    copyFile(destDir.toString(), otherDestDir.toString(), "${project.name}.exe")
+                }
+            }
+        }
+
+        def destinationUriString = otherDestDir.toPath().toUri().toString()
+        if (!destinationUriString.startsWith("file:///")) {
+            destinationUriString = destinationUriString.replace("file://", "file://///")
+        }
+
+        println ''
+        println 'JAR folder path:'
+        println otherDestDir
+        println 'JAR folder URI:'
+        println destinationUriString
+    }
+}
+
+task sourcesJar(type: Jar) {
+
+    subProjectNames.each { dependsOn("${it}:sourcesJar") }
+    onlyIf { rootDir == projectDir }
+
+    archiveFileName = "${project.name}_sources.jar"
+    File destDir = createDestDir()
+    destinationDirectory.set(destDir)
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    try {
+        manifest {
+            attributes(
+                    'Implementation-Title': project.name,
+                    'Implementation-Version': project.version,
+                    'Build-Time': new Date().format('dd MMM yyyy, hh:mm:ss zzz'))
+        }
+    } catch (Exception ignored) {
+    }
+
+    archiveClassifier.set('sources')
+    from {
+        final projects = createProjectAndDependenciesList(project)
+        projects.collect { it.sourceSets.main.allSource }
+    }
+
+    doLast {
+        new File((String) "${destDir}/.gitignore").text = '/*.jar\n/*.exe\n/*.res'
+        File otherDestDir = createOtherDestDir()
+        if (otherDestDir != destDir) {
+            copyFile(destDir.toString(), otherDestDir.toString(), archiveFileName.get().toString())
+        }
+
+        def destinationUriString = otherDestDir.toPath().toUri().toString()
+        if (!destinationUriString.startsWith("file:///")) {
+            destinationUriString = destinationUriString.replace("file://", "file://///")
+        }
+
+        println ''
+        println 'sources JAR folder path:'
+        println otherDestDir
+        println 'sources JAR folder URI:'
+        println destinationUriString
+    }
+}
+
+File createOtherDestDir() {
+
+    File otherDestDir = null
+    if (project.hasProperty('jarFolderPath') && jarFolderPath != null && !jarFolderPath.trim().isEmpty()) {
+        final File jarFolder = file(jarFolderPath)
+        if (jarFolder.isDirectory()) {
+            otherDestDir = jarFolder
+        } else {
+            boolean jarFolderCreated = jarFolder.mkdirs()
+            if (jarFolderCreated) {
+                otherDestDir = jarFolder
+            } else {
+                println 'failed to create JAR folder'
+            }
+        }
+    }
+    if (otherDestDir == null) {
+        otherDestDir = createDestDir()
+    }
+    return otherDestDir
+}
+
+File createDestDir() {
+    return file("../${project.name}_EXE")
+}
+
+def copyFile(String srcDir, String destDir, String fileName) {
+
+    Files.copy(
+            new File(srcDir, fileName).toPath(),
+            new File(destDir, fileName).toPath(),
+            StandardCopyOption.REPLACE_EXISTING)
+}
+
+def createProjectAndDependenciesList(Project project) {
+
+    final projectAndDependencies = new LinkedHashSet<>()
+    projectAndDependencies.add(project)
+
+    project.configurations.api.dependencies
+            .findAll { dependency -> dependency instanceof ProjectDependency }
+            .each {
+                Project dependencyProject = it.dependencyProject
+                Set<Project> dependencyProjectProjectAndDependencies =
+                        createProjectAndDependenciesList(dependencyProject)
+                projectAndDependencies.addAll(dependencyProjectProjectAndDependencies)
+            }
+
+    return projectAndDependencies
+}
+
+artifacts {
+
+    archives fatJar
+    archives sourcesJar
+}
+
+task subProjectDependencyTree {
+
+    subProjectNames.each { dependsOn("${it}:subProjectDependencyTree") }
+    onlyIf { rootDir == projectDir }
+
+    doLast { subProjectDependencyTreeRec(project, '') }
+}
+
+def subProjectDependencyTreeRec(final Project prj, final String indent) {
+
+    prj.configurations.api.dependencies
+            .findAll { dependency -> dependency instanceof ProjectDependency }
+            .each {
+                final ProjectDependency projectDependency = (ProjectDependency) it
+                final String subPrjName = ":${projectDependency.name}"
+                final Project subPrj = project(subPrjName)
+                println indent + subPrj.projectDir.absolutePath
+                subProjectDependencyTreeRec(subPrj, indent + '\t')
+            }
+}
+
+task subProjectRunConfigurations {
+
+    subProjectNames.each { dependsOn("${it}:subProjectRunConfigurations") }
+    onlyIf { rootDir == projectDir }
+
+    doLast {
+        final String projectPathString = project.projectDir.absolutePath
+        Path runConfigurationsFolderPath = Paths.get(projectPathString, '.idea', 'runConfigurations')
+        if (!Files.isDirectory(runConfigurationsFolderPath)) {
+            Files.createDirectories(runConfigurationsFolderPath)
+        }
+        subProjectRunConfigurationsRec(project, runConfigurationsFolderPath, new HashSet<>())
+    }
+}
+
+def subProjectRunConfigurationsRec(
+        final Project prj, final Path runConfigurationsFolderPath, final Set<String> subPrjPathStrings) {
+
+    prj.configurations.api.dependencies
+            .findAll { dependency -> dependency instanceof ProjectDependency }
+            .each {
+                final ProjectDependency projectDependency = (ProjectDependency) it
+                final String subPrjName = ":${projectDependency.name}"
+                final Project subPrj = project(subPrjName)
+                final String subPrjPathString = subPrj.projectDir.absolutePath
+                if (!subPrjPathStrings.contains(subPrjPathString)) {
+                    final Path subPrjRunConfigurationsFolderPath = Paths.get(subPrjPathString, '.idea', 'runConfigurations')
+                    if (Files.isDirectory(subPrjRunConfigurationsFolderPath)) {
+                        Files.list(subPrjRunConfigurationsFolderPath).forEach({
+                            final String fileName = it.getFileName().toString()
+                            Path destinationPath = Paths.get(runConfigurationsFolderPath.toString(), fileName)
+                            if (!Files.exists(destinationPath)) {
+                                println String.format('%s --> %s', it, destinationPath)
+                                Files.copy(it, destinationPath)
+                            }
+                        })
+                    }
+                    subPrjPathStrings.add(subPrjPathString)
+                }
+                subProjectRunConfigurationsRec(subPrj, runConfigurationsFolderPath, subPrjPathStrings)
+            }
+}
+
+apply plugin: 'idea'
+idea {
+    module {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+        downloadJavadoc = true
+        downloadSources = true
+    }
+}
+
+apply plugin: 'eclipse'
+eclipse {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+    classpath {
+        downloadJavadoc = true
+        downloadSources = true
+        containsTestFixtures = true
+        containers 'org.eclipse.fx.ide.jdt.core.JAVAFX_CONTAINER'
+    }
+}
+
+eclipse.classpath.file {
+    whenMerged { classpath ->
+        def testDependencies = classpath.entries.findAll { entry -> entry instanceof org.gradle.plugins.ide.eclipse.model.ProjectDependency && entry.entryAttributes.test }
+        classpath.entries.removeAll testDependencies
+    }
+}
+
+def eclipseResourceEncoding = tasks.register('eclipseResourceEncoding')
+// encoding will be defined when eclipse task runs
+tasks.named('eclipse') { dependsOn(eclipseResourceEncoding) }
+// run the task on "Refresh Gradle Project"
+eclipse.synchronizationTasks(eclipseResourceEncoding)
+
+eclipseResourceEncoding.configure {
+    ext.outputFile = file('.settings/org.eclipse.core.resources.prefs')
+    def compileTask = tasks.findByName('compileJava')
+    ext.encoding = provider({ compileTask?.options?.encoding }).orElse(providers.systemProperty('file.encoding'))
+
+    inputs.property("file.encoding", encoding)
+    outputs.file(outputFile).withPropertyName('outputFile')
+    doLast {
+        Properties eclipseEncodingProperties = new Properties(Collections.singletonMap('eclipse.preferences.version', '1'))
+        eclipseEncodingProperties.put('encoding/<project>', encoding.get())
+        outputFile.withOutputStream { eclipseEncodingProperties.store(it, 'generated by ' + name) }
+        eclipseEncodingProperties.list(System.out)
+    }
+}
+
+afterEvaluate {
+    eclipse.project {
+        natures 'ch.acanda.eclipse.pmd.builder.PMDNature'
+    }
+}
+
+test.onlyIf { ! Boolean.getBoolean('skip.tests') }
+
+test {
+    useJUnitPlatform()
+    maxHeapSize = '8g'
+    outputs.upToDateWhen { false }
+    testLogging {
+        events "passed", "skipped", "failed", "standardOut", "standardError"
+    }
+    systemProperty 'args', System.getProperty('args')
+}
+
+apply plugin: 'test-report-aggregation'

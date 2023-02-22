@@ -1,0 +1,9 @@
+final String projectPath = file('.').getAbsolutePath()
+final String rootDirPath = file('../../../../').getAbsolutePath()
+gradle.ext.rootDirPath = rootDirPath
+final String[] subProjectsRelativePaths = [
+            '/Projects/Personal/FlattenDir/FlattenDir'
+    ]
+
+apply from: rootDirPath + '/common_settings.gradle'
+configureSettings(projectPath, rootDirPath, subProjectsRelativePaths)
